@@ -3,6 +3,7 @@ import ExploreBtn from "@/components/ExploreBtn";
 import { IEvent } from "@/database";
 import { cacheLife } from "next/cache";
 
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 
 const Page = async () => {
