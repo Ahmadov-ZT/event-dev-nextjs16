@@ -12,6 +12,9 @@ const Page = async () => {
   const response = await fetch(`${BASE_URL}/api/events`);
   const { events } = await response.json();
 
+  console.log("BASE_URL:", BASE_URL);
+
+
   return (
     <section>
       <h1 className="text-center">
