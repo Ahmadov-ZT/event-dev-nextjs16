@@ -2,29 +2,69 @@ import BookEvent from "@/components/BookEvent";
 import EventCard from "@/components/EventCard";
 import { IEvent } from "@/database";
 import { getSimilarEventsBySlug } from "@/lib/actions/event.actions";
-import { getBaseUrl } from "@/lib/getBaseUrl";
+import { cacheLife } from "next/cache";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+
+const EventDetailItem = ({
+  icon,
+  alt,
+  label,
+}: {
+  icon: string;
+  alt: string;
+  label: string;
+}) => (
+  <div className="flex-row-gap-2 items-center">
+    <Image src={icon} alt={alt} width={17} height={17} />
+    <p>{label}</p>
+  </div>
+);
+
+const EventAgenda = ({ agendaItems }: { agendaItems: string[] }) => (
+  <div className="agenda">
+    <h2>Agenda</h2>
+    <ul>
+      {agendaItems.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  </div>
+);
+
+const EventTags = ({ tags }: { tags: string[] }) => (
+  <div className="flex flex-row gap-1.5 flex-wrap">
+    {tags.map((tag) => (
+      <div className="pill" key={tag}>
+        {tag}
+      </div>
+    ))}
+  </div>
+);
+
 const EventDetails = async ({ params }: { params: any }) => {
-  let slug = params?.slug;
-  if (!slug || typeof slug !== "string") return notFound();
+  // Defensive handling: accept either `{ params: { slug } }`, a promise that
+  // resolves to a slug string, or a promise that resolves to `{ slug }`.
+  let slug: string | undefined;
 
-  const base = getBaseUrl();
-
-  const request = await fetch(`${base}/api/events/${slug}`, {
-    cache: "no-store",
-  });
-
-  if (!request.ok) {
-    const msg = await request.text();
-    console.error("Event fetch error:", msg);
-    return notFound();
+  if (params && typeof params.then === "function") {
+    const resolved = await params;
+    if (typeof resolved === "string") slug = resolved;
+    else if (resolved && typeof resolved.slug === "string") slug = resolved.slug;
+  } else if (params && typeof params.slug === "string") {
+    slug = params.slug;
+  } else if (typeof params === "string") {
+    slug = params;
   }
 
-  const { event } = await request.json();
-  if (!event) return notFound();
+  if (!slug) return notFound();
 
+  const request = await fetch(`${BASE_URL ?? ""}/api/events/${slug}`);
+  const { event } = await request.json();
+  if (!event || !event.description) return notFound();
+  
   const {
     description,
     image,
@@ -41,20 +81,35 @@ const EventDetails = async ({ params }: { params: any }) => {
 
   if (!description) return notFound();
 
-  // Agenda normalize
+  const bookings = 10;
+
+  // Normalize agenda and tags in case they were stored as strings
   let normalizedAgenda: string[] = [];
   if (Array.isArray(agenda)) normalizedAgenda = agenda;
-  else if (typeof agenda === "string")
-    normalizedAgenda = agenda.split(",").map((a) => a.trim());
+  else if (typeof agenda === 'string') {
+    try {
+      // try parse JSON array
+      const parsed = JSON.parse(agenda);
+      if (Array.isArray(parsed)) normalizedAgenda = parsed;
+      else normalizedAgenda = agenda.split(',').map((a: string) => a.trim()).filter(Boolean);
+    } catch {
+      normalizedAgenda = agenda.split(',').map((a: string) => a.trim()).filter(Boolean);
+    }
+  }
 
-  // Tags normalize
   let normalizedTags: string[] = [];
   if (Array.isArray(tags)) normalizedTags = tags;
-  else if (typeof tags === "string")
-    normalizedTags = tags.split(",").map((t) => t.trim());
+  else if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) normalizedTags = parsed;
+      else normalizedTags = tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+    } catch {
+      normalizedTags = tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+    }
+  }
 
   const similarEvents: IEvent[] = await getSimilarEventsBySlug(slug);
-  const bookings = 10;
 
   return (
     <section id="event">
@@ -62,9 +117,8 @@ const EventDetails = async ({ params }: { params: any }) => {
         <h1>Event Description</h1>
         <p>{description}</p>
       </div>
-
       <div className="details">
-        {/* Left Side */}
+        {/* Left Side*/}
         <div className="content">
           <Image
             src={image}
@@ -73,66 +127,48 @@ const EventDetails = async ({ params }: { params: any }) => {
             height={800}
             className="banner"
           />
-
           <section className="flex-col-gap-2">
             <h2>overview</h2>
             <p>{overview}</p>
           </section>
-
           <section className="flex-col-gap-2">
             <h2>Event Details</h2>
-            <div className="flex-row-gap-2 items-center">
-              <Image src="/icons/calendar.svg" alt="calendar" width={17} height={17} />
-              <p>{date}</p>
-            </div>
-            <div className="flex-row-gap-2 items-center">
-              <Image src="/icons/clock.svg" alt="clock" width={17} height={17} />
-              <p>{time}</p>
-            </div>
-            <div className="flex-row-gap-2 items-center">
-              <Image src="/icons/pin.svg" alt="pin" width={17} height={17} />
-              <p>{location}</p>
-            </div>
-            <div className="flex-row-gap-2 items-center">
-              <Image src="/icons/mode.svg" alt="mode" width={17} height={17} />
-              <p>{mode}</p>
-            </div>
-            <div className="flex-row-gap-2 items-center">
-              <Image src="/icons/audience.svg" alt="audience" width={17} height={17} />
-              <p>{audience}</p>
-            </div>
+            <EventDetailItem
+              icon="/icons/calendar.svg"
+              alt="calendar"
+              label={date}
+            />
+            <EventDetailItem icon="/icons/clock.svg" alt="clock" label={time} />
+            <EventDetailItem icon="/icons/pin.svg" alt="pin" label={location} />
+            <EventDetailItem icon="/icons/mode.svg" alt="mode" label={mode} />
+            <EventDetailItem
+              icon="/icons/audience.svg"
+              alt="audience"
+              label={audience}
+            />
           </section>
 
-          <section className="agenda">
-            <h2>Agenda</h2>
-            <ul>
-              {normalizedAgenda.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
+          <EventAgenda agendaItems={normalizedAgenda} />
 
           <section className="flex-col-gap-2">
             <h2>About the organizer</h2>
             <p>{organizer}</p>
           </section>
 
-          <div className="flex flex-row gap-1.5 flex-wrap">
-            {normalizedTags.map((tag) => (
-              <div className="pill" key={tag}>
-                {tag}
-              </div>
-            ))}
-          </div>
+          <EventTags tags={normalizedTags} />
         </div>
 
-        {/* Right Side */}
+        {/* Right Side*/}
         <aside className="booking">
           <div className="signup-card">
             <h2>Book your spot</h2>
-            <p className="text-sm">
-              Join {bookings} people who have already booked their spot
-            </p>
+            {bookings > 0 ? (
+              <p className="text-sm">
+                Join {bookings} people who have already booked their spot
+              </p>
+            ) : (
+              <p className="text-sm">Be the first to book your spot</p>
+            )}
 
             <BookEvent eventId={event._id} slug={event.slug} />
           </div>
@@ -142,13 +178,13 @@ const EventDetails = async ({ params }: { params: any }) => {
       <div className="flex w-full flex-col gap-4 pt-20">
         <h2>Similar Events</h2>
         <div className="events">
-          {similarEvents?.map((evt: IEvent) => (
-            <EventCard key={evt.title} {...evt} />
+          {similarEvents.length > 0 && similarEvents.map((similarEvents:IEvent)=>(
+            <EventCard key={similarEvents.title} {...similarEvents}/>
           ))}
         </div>
       </div>
     </section>
   );
-};
+}
 
-export default EventDetails;
+export default EventDetails
