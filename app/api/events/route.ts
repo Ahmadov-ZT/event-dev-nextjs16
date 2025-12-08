@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
-          { resource_type: "image", folder: "DevEvent" },
+          { resource_type: "image", folder: "DevLoop" },
           (error, results) => {
             if (error) return reject(error);
 

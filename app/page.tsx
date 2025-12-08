@@ -15,7 +15,7 @@ const Page = async () => {
   return (
     <section>
       <h1 className="text-center">
-        The Hub for Every Dev <br /> Event You Mustn't Miss
+        The Premier Hub For <br /> Essential Developer Events
       </h1>
       <p className="text-center mt-5">
         Hackathons, Meetups, and Conferences, All in One Place

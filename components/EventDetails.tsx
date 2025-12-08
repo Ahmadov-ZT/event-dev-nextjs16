@@ -44,35 +44,70 @@ const EventTags = ({ tags }: { tags: string[] }) => (
   </div>
 );
 
-const EventDetails = async ({params}:{params: Promise<string>}) => {
-    'use cache'
-    cacheLife('hours');
+const EventDetails = async ({ params }: { params: any }) => {
+  // Defensive handling: accept either `{ params: { slug } }`, a promise that
+  // resolves to a slug string, or a promise that resolves to `{ slug }`.
+  let slug: string | undefined;
 
-  const  slug  = await params;
+  if (params && typeof params.then === "function") {
+    const resolved = await params;
+    if (typeof resolved === "string") slug = resolved;
+    else if (resolved && typeof resolved.slug === "string") slug = resolved.slug;
+  } else if (params && typeof params.slug === "string") {
+    slug = params.slug;
+  } else if (typeof params === "string") {
+    slug = params;
+  }
 
-  const request = await fetch(`${BASE_URL}/api/events/${slug}`);
+  if (!slug) return notFound();
+
+  const request = await fetch(`${BASE_URL ?? ""}/api/events/${slug}`);
   const { event } = await request.json();
-  if (!event?.description) return notFound();
+  if (!event || !event.description) return notFound();
   
   const {
-    
-      description,
-      image,
-      overview,
-      date,
-      time,
-      location,
-      mode,
-      agenda,
-      audience,
-      tags,
-      organizer,
-    
+    description,
+    image,
+    overview,
+    date,
+    time,
+    location,
+    mode,
+    agenda,
+    audience,
+    tags,
+    organizer,
   } = event;
 
   if (!description) return notFound();
 
   const bookings = 10;
+
+  // Normalize agenda and tags in case they were stored as strings
+  let normalizedAgenda: string[] = [];
+  if (Array.isArray(agenda)) normalizedAgenda = agenda;
+  else if (typeof agenda === 'string') {
+    try {
+      // try parse JSON array
+      const parsed = JSON.parse(agenda);
+      if (Array.isArray(parsed)) normalizedAgenda = parsed;
+      else normalizedAgenda = agenda.split(',').map((a: string) => a.trim()).filter(Boolean);
+    } catch {
+      normalizedAgenda = agenda.split(',').map((a: string) => a.trim()).filter(Boolean);
+    }
+  }
+
+  let normalizedTags: string[] = [];
+  if (Array.isArray(tags)) normalizedTags = tags;
+  else if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      if (Array.isArray(parsed)) normalizedTags = parsed;
+      else normalizedTags = tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+    } catch {
+      normalizedTags = tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+    }
+  }
 
   const similarEvents: IEvent[] = await getSimilarEventsBySlug(slug);
 
@@ -113,14 +148,14 @@ const EventDetails = async ({params}:{params: Promise<string>}) => {
             />
           </section>
 
-          <EventAgenda agendaItems={agenda} />
+          <EventAgenda agendaItems={normalizedAgenda} />
 
           <section className="flex-col-gap-2">
             <h2>About the organizer</h2>
             <p>{organizer}</p>
           </section>
 
-          <EventTags tags={tags} />
+          <EventTags tags={normalizedTags} />
         </div>
 
         {/* Right Side*/}
